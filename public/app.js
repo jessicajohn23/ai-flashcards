@@ -1,3 +1,11 @@
+/* ============================================================
+   NEON RECALL: app logic
+   State is loaded from / persisted to Supabase (see db.js).
+   `state` is an in-memory cache used to render instantly; every
+   mutation updates it locally AND fires the matching Supabase
+   write so other devices see the change next time they load.
+   ============================================================ */
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -23,7 +31,9 @@ function defaultState() {
 let state = defaultState();
 let currentUser = null;
 
-
+/* ------------------------------------------------------------
+   TOAST
+   ------------------------------------------------------------ */
 let toastTimer = null;
 function toast(msg) {
   const el = document.getElementById("toast");
@@ -39,7 +49,9 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-
+/* ============================================================
+   AUTH
+   ============================================================ */
 function showAuthGate() { document.getElementById("authGate").hidden = false; }
 function hideAuthGate() { document.getElementById("authGate").hidden = true; }
 function showLoading() { document.getElementById("dataLoading").hidden = false; }
@@ -64,7 +76,7 @@ async function onSignedIn(user) {
     state.progress = progress;
   } catch (err) {
     console.error("[NeonRecall] fetchAll failed:", err);
-    toast("⚠️ Couldn't load your decks, try refreshing.");
+    toast("⚠️ Couldn't load your decks — try refreshing.");
   }
   hideLoading();
   renderTopbar();
@@ -72,6 +84,9 @@ async function onSignedIn(user) {
 }
 
 async function initAuth() {
+  // Register the listener FIRST. If we check getSession() before this, there's a
+  // race: a session created by an in-flight OAuth/magic-link redirect can fire its
+  // SIGNED_IN event before we're listening for it, and we'd miss it entirely.
   DB.onAuthChange(async (session) => {
     if (session && (!currentUser || currentUser.id !== session.user.id)) {
       await onSignedIn(session.user);
@@ -88,8 +103,15 @@ async function initAuth() {
 }
 
 document.getElementById("googleSignInBtn").addEventListener("click", async () => {
-  const { error } = await DB.signInWithGoogle();
-  if (error) document.getElementById("authStatus").textContent = error.message;
+  const statusEl = document.getElementById("authStatus");
+  statusEl.textContent = "";
+  try {
+    const { error } = await DB.signInWithGoogle();
+    if (error) statusEl.textContent = error.message;
+  } catch (err) {
+    console.error("[NeonRecall] Google sign-in threw:", err);
+    statusEl.textContent = "Something went wrong reaching Supabase — check the console for details.";
+  }
 });
 
 document.getElementById("emailSignInBtn").addEventListener("click", async () => {
@@ -97,15 +119,22 @@ document.getElementById("emailSignInBtn").addEventListener("click", async () => 
   const statusEl = document.getElementById("authStatus");
   if (!email) { statusEl.textContent = "Enter your email first."; return; }
   statusEl.textContent = "Sending magic link…";
-  const { error } = await DB.signInWithEmail(email);
-  statusEl.textContent = error ? error.message : "Check your inbox for a sign-in link ✉️";
+  try {
+    const { error } = await DB.signInWithEmail(email);
+    statusEl.textContent = error ? error.message : "Check your inbox for a sign-in link ✉️";
+  } catch (err) {
+    console.error("[NeonRecall] Magic link send threw:", err);
+    statusEl.textContent = "Something went wrong reaching Supabase — check the console for details.";
+  }
 });
 
 document.getElementById("userChip").addEventListener("click", async () => {
   if (confirm("Sign out of Neon Recall?")) await DB.signOut();
 });
 
-
+/* ------------------------------------------------------------
+   NAVIGATION
+   ------------------------------------------------------------ */
 function switchView(name) {
   document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
   document.getElementById("view-" + name).classList.add("active");
@@ -129,7 +158,9 @@ function levelFromXP(xp) {
   return Math.floor(xp / 100) + 1;
 }
 
-
+/* ------------------------------------------------------------
+   GAMIFICATION HELPERS
+   ------------------------------------------------------------ */
 function recordActivityToday() {
   const today = todayStr();
   state.progress.activity[today] = (state.progress.activity[today] || 0) + 1;
@@ -158,7 +189,9 @@ function persistCard(card, patch) {
   DB.updateCard(card.id, patch).then(({ error }) => { if (error) toast("⚠️ Sync failed — changes stayed local"); });
 }
 
-
+/* ============================================================
+   HOME / UPLOAD
+   ============================================================ */
 let selectedFiles = [];
 
 const dropzone = document.getElementById("dropzone");
@@ -290,7 +323,7 @@ document.getElementById("stayHomeBtn").addEventListener("click", () => {
   document.getElementById("readyOverlay").hidden = true;
 });
 
-
+/* ---- Due for review, shown on Home ---- */
 function renderDueSection() {
   const due = state.decks.filter((d) => daysSince(d.last_reviewed) >= 3 || d.last_reviewed === null);
   const section = document.getElementById("dueSection");
@@ -314,14 +347,16 @@ function renderDueSection() {
   });
 }
 
-
+/* ============================================================
+   DECKS VIEW
+   ============================================================ */
 function renderDecks() {
   const grid = document.getElementById("deckGrid");
   const hint = document.getElementById("decksEmptyHint");
   grid.innerHTML = "";
 
   if (state.decks.length === 0) {
-    hint.textContent = "No decks yet, head to Upload to generate your first one.";
+    hint.textContent = "No decks yet — head to Upload to generate your first one.";
     return;
   }
   hint.textContent = "Generated decks show up here.";
@@ -359,7 +394,9 @@ function renderDecks() {
   });
 }
 
-
+/* ============================================================
+   STUDY VIEW
+   ============================================================ */
 let currentDeckId = null;
 let currentFilter = "all";
 let queue = [];
@@ -438,6 +475,7 @@ function renderStack() {
     const el = document.createElement("div");
 
     if (layer > 0) {
+      // Background cards are a pure depth cue — no text, so nothing peeks through confusingly.
       el.className = `flashcard stack-${layer}`;
       el.innerHTML = `<div class="flashcard-inner"><div class="flashcard-face front blank-face"></div></div>`;
       stackEl.appendChild(el);
@@ -567,7 +605,7 @@ document.getElementById("backToDecks").addEventListener("click", () => {
   switchView("decks");
 });
 
-
+/* ---- Shuffle / Reset / Delete ---- */
 document.getElementById("shuffleBtn").addEventListener("click", () => {
   const deck = currentDeck();
   for (let i = deck.cards.length - 1; i > 0; i--) {
@@ -576,7 +614,7 @@ document.getElementById("shuffleBtn").addEventListener("click", () => {
   }
   DB.reorderCards(deck.cards.map((c, i) => ({ id: c.id, position: i })))
     .then(() => {})
-    .catch(() => toast("⚠️ Sync failed, changes stayed local"));
+    .catch(() => toast("⚠️ Sync failed — changes stayed local"));
   buildQueue();
   renderStack();
   toast("🔀 Shuffled");
@@ -587,7 +625,7 @@ document.getElementById("resetBtn").addEventListener("click", async () => {
   const deck = currentDeck();
   deck.cards.forEach((c) => (c.status = "new"));
   const { error } = await DB.resetDeckCards(deck.id);
-  if (error) toast("⚠️ Sync failed, changes stayed local");
+  if (error) toast("⚠️ Sync failed — changes stayed local");
   liveStreak = 0;
   updateLiveStreakBadge();
   buildQueue();
@@ -605,14 +643,14 @@ document.getElementById("deleteDeckBtn").addEventListener("click", async () => {
   toast("Deck deleted");
 });
 
-
+/* ---- Session complete ---- */
 function finishSession() {
   clearTimerInterval();
   const deck = currentDeck();
   if (deck) {
     deck.last_reviewed = new Date().toISOString();
     DB.updateDeck(deck.id, { last_reviewed: deck.last_reviewed }).then(({ error }) => {
-      if (error) toast("⚠️ Sync failed, changes stayed local");
+      if (error) toast("⚠️ Sync failed — changes stayed local");
     });
   }
   document.getElementById("completeHeadline").textContent =
@@ -626,7 +664,7 @@ document.getElementById("completeCloseBtn").addEventListener("click", () => {
   switchView("decks");
 });
 
-
+/* ---- Sticky notes ---- */
 document.getElementById("noteBtn").addEventListener("click", () => {
   if (sessionIndex >= queue.length) return;
   const card = getCardById(queue[sessionIndex]);
@@ -648,7 +686,7 @@ document.getElementById("stickySave").addEventListener("click", () => {
   document.getElementById("stickyOverlay").hidden = true;
 });
 
-
+/* ---- Summary modal ---- */
 document.getElementById("summaryBtn").addEventListener("click", () => {
   const deck = currentDeck();
   document.getElementById("summaryModalTitle").textContent = deck.title + " — Summary";
@@ -659,7 +697,7 @@ document.getElementById("summaryClose").addEventListener("click", () => {
   document.getElementById("summaryOverlay").hidden = true;
 });
 
-
+/* ---- Timer ---- */
 document.getElementById("timerBtn").addEventListener("click", () => {
   document.getElementById("timerOverlay").hidden = false;
 });
@@ -704,6 +742,9 @@ function clearTimerInterval() {
   document.getElementById("timerBar").hidden = true;
 }
 
+/* ============================================================
+   PROGRESS VIEW
+   ============================================================ */
 function renderProgress() {
   const xp = state.progress.xp;
   const level = levelFromXP(xp);
@@ -765,5 +806,7 @@ function renderDeckStatsTable() {
   });
 }
 
-
+/* ============================================================
+   INIT
+   ============================================================ */
 initAuth();
