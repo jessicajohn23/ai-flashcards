@@ -1,2 +1,2 @@
-window.SUPABASE_URL = "Your Supabase URL";
-window.SUPABASE_ANON_KEY = "Your Supabase anon key";
+window.SUPABASE_URL = "https://bwftynqjgyjkougttduv.supabase.co";
+window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3ZnR5bnFqZ3lqa291Z3R0ZHV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3ODk1NzQsImV4cCI6MjA5OTM2NTU3NH0.hGxlL76lNk5cVYZp_yphl6mYY4NcztJF2vsosjklNzI";
