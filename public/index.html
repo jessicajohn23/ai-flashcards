@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neon Recall — AI Flashcards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div class="scanlines"></div>
+
+<div class="auth-gate" id="authGate">
+  <div class="auth-card">
+    <div class="brand" style="justify-content:center; font-size:26px; margin-bottom:6px;">
+      <span class="brand-bolt">⚡</span>
+      <span class="brand-name">NEON<span class="brand-accent">RECALL</span></span>
+    </div>
+    <p class="hero-sub" style="margin-bottom:24px;">Sign in to sync your decks across devices.</p>
+
+    <button class="btn btn-google btn-block" id="googleSignInBtn">
+      <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right:8px; vertical-align:-3px;"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.85.86-3.05.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.71A5.4 5.4 0 0 1 3.68 9c0-.59.1-1.17.29-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+      Continue with Google
+    </button>
+
+    <div class="auth-divider"><span>or</span></div>
+
+    <div class="field">
+      <label for="authEmail">Email</label>
+      <input type="email" id="authEmail" placeholder="you@example.com" />
+    </div>
+    <button class="btn btn-primary btn-block" id="emailSignInBtn">Send verification link</button>
+    <p class="hero-sub" id="authStatus" style="min-height:18px; margin-top:14px;"></p>
+  </div>
+</div>
+
+<div class="data-loading" id="dataLoading" hidden>
+  <div class="spinner"></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-bolt">⚡</span>
+    <span class="brand-name">NEON<span class="brand-accent">RECALL</span></span>
+  </div>
+  <nav class="tabs" id="mainNav">
+    <button class="tab active" data-view="home">Upload</button>
+    <button class="tab" data-view="decks">Decks</button>
+    <button class="tab" data-view="progress">Progress</button>
+  </nav>
+  <div class="topbar-right">
+    <div class="xp-pill" id="xpPill">
+      <span class="xp-flame">🔥</span>
+      <span id="xpStreakVal">0</span>
+      <span class="xp-divider">·</span>
+      <span class="xp-lvl">LV <span id="xpLevelVal">1</span></span>
+    </div>
+    <button class="user-chip" id="userChip" hidden>
+      <span class="user-chip-avatar" id="userAvatar">?</span>
+      <span class="user-chip-email" id="userEmail"></span>
+    </button>
+  </div>
+</header>
+
+<main id="app">
+
+  
+  <section class="view active" id="view-home">
+    <div class="hero">
+      <h1>Turn any document into a deck<span class="cursor">_</span></h1>
+      <p class="hero-sub">Drop in notes, PDFs, slides, whatever; set your card count, and let the AI build your deck.</p>
+    </div>
+
+    <div class="upload-card">
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" multiple hidden
+          accept=".pdf,.docx,.txt,.md,.csv,.json,.rtf" />
+        <div class="dropzone-inner">
+          <div class="dropzone-icon">⇪</div>
+          <p><strong>Drag files here</strong> or click to browse</p>
+          <p class="dropzone-hint">PDF · DOCX · TXT · MD · CSV · JSON; mix as many as you like</p>
+        </div>
+      </div>
+      <ul class="file-list" id="fileList"></ul>
+
+      <div class="upload-controls">
+        <div class="field">
+          <label for="numCards">Number of flashcards</label>
+          <input type="number" id="numCards" min="1" max="40" value="15" />
+        </div>
+        <div class="field grow">
+          <label for="deckName">Deck name <span class="optional">(optional — AI will suggest one)</span></label>
+          <input type="text" id="deckName" placeholder="e.g. Chapter 4: Cell Biology" />
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="generateBtn">
+        <span class="btn-label">⚡ Generate Deck</span>
+      </button>
+      <p class="error-msg" id="uploadError"></p>
+    </div>
+
+    <div class="due-section" id="dueSection" hidden>
+      <h2 class="section-title">Due for review</h2>
+      <div class="due-list" id="dueList"></div>
+    </div>
+  </section>
+
+  
+  <section class="view" id="view-decks">
+    <div class="view-header">
+      <h1>Your decks</h1>
+      <p class="hero-sub" id="decksEmptyHint">Generated decks show up here.</p>
+    </div>
+    <div class="deck-grid" id="deckGrid"></div>
+  </section>
+
+ 
+  <section class="view" id="view-progress">
+    <div class="view-header">
+      <h1>Progress &amp; activity</h1>
+    </div>
+
+    <div class="progress-stats">
+      <div class="stat-card">
+        <div class="stat-icon">✦</div>
+        <div class="stat-num" id="statXP">0</div>
+        <div class="stat-label">Total XP</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🔥</div>
+        <div class="stat-num" id="statStreak">0</div>
+        <div class="stat-label">Current streak</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-num" id="statBestStreak">0</div>
+        <div class="stat-label">Best streak</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🗂</div>
+        <div class="stat-num" id="statCardsKnown">0</div>
+        <div class="stat-label">Cards mastered</div>
+      </div>
+    </div>
+
+    <div class="level-track">
+      <div class="level-track-label">
+        <span>Level <span id="levelNum">1</span></span>
+        <span id="levelXpText">0 / 100 XP</span>
+      </div>
+      <div class="level-bar"><div class="level-bar-fill" id="levelBarFill"></div></div>
+    </div>
+
+    <h2 class="section-title">Last 5 weeks</h2>
+    <div class="heatmap" id="heatmap"></div>
+
+    <h2 class="section-title">Deck breakdown</h2>
+    <div class="deck-stats-table" id="deckStatsTable"></div>
+  </section>
+
+ 
+  <section class="view" id="view-study">
+    <div class="study-header">
+      <button class="icon-btn" id="backToDecks">← Decks</button>
+      <div class="study-title">
+        <h2 id="studyDeckTitle">Deck</h2>
+        <span id="studyDeckSub"></span>
+      </div>
+      <button class="icon-btn" id="summaryBtn">📄 Summary</button>
+    </div>
+
+    <div class="filter-row" id="filterRow">
+      <button class="chip active" data-filter="all">All</button>
+      <button class="chip" data-filter="unknown">Unknown</button>
+      <button class="chip" data-filter="known">Known</button>
+      <button class="chip" data-filter="favorite">★ Favorites</button>
+      <button class="chip" data-filter="flagged">⚑ Flagged</button>
+    </div>
+
+    <div class="study-toolbar">
+      <button class="tool-btn" id="shuffleBtn" title="Shuffle">🔀 Shuffle</button>
+      <button class="tool-btn" id="resetBtn" title="Reset progress">↺ Reset</button>
+      <button class="tool-btn" id="timerBtn" title="Set a timer">⏱ Timer</button>
+      <button class="tool-btn danger" id="deleteDeckBtn" title="Delete deck">🗑 Delete</button>
+    </div>
+
+    <div class="timer-bar" id="timerBar" hidden>
+      <span id="timerDisplay">00:00</span>
+      <button class="tool-btn" id="cancelTimerBtn">Cancel</button>
+    </div>
+
+    <div class="stack-wrap">
+      <div class="streak-badge" id="liveStreakBadge" hidden>🔥 <span id="liveStreakVal">0</span> in a row!</div>
+      <div class="card-stack" id="cardStack"></div>
+      <p class="stack-empty" id="stackEmpty" hidden>No cards in this filter. Nice work! 🎉</p>
+      <p class="stack-progress" id="stackProgress"></p>
+    </div>
+
+    <div class="card-actions">
+      <button class="action-btn" id="flagBtn" title="Flag for later">⚑ Flag</button>
+      <button class="action-btn" id="favBtn" title="Favorite">★ Favorite</button>
+      <button class="action-btn wide" id="flipBtn" title="Flip card">⟲ Flip</button>
+      <button class="action-btn" id="noteBtn" title="Add sticky note">🗒 Note</button>
+      <button class="action-btn" id="nextBtn" title="Skip">⏭ Next</button>
+    </div>
+
+    <div class="answer-actions">
+      <button class="answer-btn dont-know" id="dontKnowBtn">✕ Don't know it</button>
+      <button class="answer-btn got-it" id="gotItBtn">✓ Got it!</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- Sticky note popup -->
+<div class="sticky-overlay" id="stickyOverlay" hidden>
+  <div class="sticky-note">
+    <button class="sticky-close" id="stickyClose">×</button>
+    <textarea id="stickyText" placeholder="Jot something down about this card..."></textarea>
+    <button class="btn btn-primary" id="stickySave">Add note</button>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="summaryOverlay" hidden>
+  <div class="modal">
+    <button class="sticky-close" id="summaryClose">×</button>
+    <h2 id="summaryModalTitle">Summary</h2>
+    <p id="summaryModalText"></p>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="timerOverlay" hidden>
+  <div class="modal small">
+    <button class="sticky-close" id="timerClose">×</button>
+    <h2>Set a study timer</h2>
+    <p class="hero-sub">Optional: race the clock or skip it entirely.</p>
+    <div class="timer-options">
+      <button class="chip" data-min="3">3 min</button>
+      <button class="chip" data-min="5">5 min</button>
+      <button class="chip" data-min="10">10 min</button>
+      <button class="chip" data-min="15">15 min</button>
+    </div>
+    <button class="btn btn-ghost btn-block" id="skipTimerBtn">Skip timer</button>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="readyOverlay" hidden>
+  <div class="modal small">
+    <h2>Deck ready ⚡</h2>
+    <p id="readyDeckTitle" class="ready-title"></p>
+    <p class="hero-sub" id="readyDeckCount"></p>
+    <button class="btn btn-primary btn-block" id="openNewDeckBtn">📂 Open deck</button>
+    <button class="btn btn-ghost btn-block" id="stayHomeBtn">Make another</button>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="completeOverlay" hidden>
+  <div class="modal small">
+    <h2 id="completeHeadline">Deck complete! 🎉</h2>
+    <p class="hero-sub" id="completeStats"></p>
+    <button class="btn btn-primary btn-block" id="completeCloseBtn">Back to decks</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
